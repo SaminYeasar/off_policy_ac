@@ -43,29 +43,5 @@ do
   done
 done
 
-for method in ${methods[@]}
-do
-  for env in ${envname[@]}
-  do
-    for seed in ${seeds[@]}
-    do
-      echo "#!/bin/bash" >> temprun.sh
-      echo "#SBATCH --account=def-dprecup" >> temprun.sh
-      echo "#SBATCH --output=\"/scratch/syarnob/DR_slurm/slurm-%j.out\"" >> temprun.sh
-      echo "#SBATCH --job-name=DREst_env_${env}_method_${method}" >> temprun.sh
-      echo "#SBATCH --cpus-per-task=6"  >> temprun.sh
-      echo "#SBATCH --gres=gpu:1" >> temprun.sh
-      echo "#SBATCH --mem=10G" >> temprun.sh
-      echo "#SBATCH --time=12:00:00" >> temprun.sh
-      echo "module load singularity" >> temprun.sh
-      echo "echo "Syncing singularity image..." " >> temprun.sh
-      echo "cp -r /scratch/syarnob/rllab.simg \$SLURM_TMPDIR/" >> temprun.sh
-      echo "echo "Running image." " >> temprun.sh
-      echo "singularity exec --nv -B \$SLURM_TMPDIR:/tmp \$SLURM_TMPDIR/rllab.simg python main.py --activate_HDR --policy_name ${method[@]} --env_name ${env[@]} --seed ${seed[@]}" >> temprun.sh
-              cat temprun.sh
-              eval "sbatch temprun.sh"
-      rm temprun.sh
-    done
-  done
-done
+
 
