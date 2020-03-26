@@ -73,6 +73,10 @@ class TD3(object):
         self.actor = Actor(state_dim, action_dim, max_action).to(device)
         self.actor_target = Actor(state_dim, action_dim, max_action).to(device)
         self.actor_target.load_state_dict(self.actor.state_dict())
+
+        self.old_actor = Actor(state_dim, action_dim, max_action).to(device)
+        self.old_actor.load_state_dict(self.actor.state_dict())
+
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters())
 
         self.critic = Critic(state_dim, action_dim).to(device)
@@ -144,8 +148,8 @@ class TD3(object):
                 # Compute actor loss
                 #actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
                 #reg = lmbda * nn.MSELoss(self.actor(state), self.actor_target(state))
-                reg = lmbda * (self.actor(state) - self.actor_target(state)).pow(2).mean()
-                actor_loss = -self.critic.Q1(state, self.actor(state)).mean() - reg.detach()
+                reg = 100* lmbda * (self.actor(state) - self.old_actor(state)).pow(2).mean()
+                actor_loss = -self.critic.Q1(state, self.actor(state)).mean() - reg
 
                 # record actor loss:
                 episodic_actor_loss.append(actor_loss.detach())
@@ -164,6 +168,8 @@ class TD3(object):
 
 
 
+        for param, old_param in zip(self.actor.parameters(), self.old_actor.parameters()):
+            old_param.data.copy_(tau * param.data + (1 - tau) * old_param.data)
 
         if logger: 
             logger.record_critic_loss(torch.stack(episodic_critic_loss).mean().cpu().numpy())

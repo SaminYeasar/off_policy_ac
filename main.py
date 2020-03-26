@@ -69,7 +69,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--use_noise_rewards", action="store_true", default=False, help='whether to use noisy rewards or not')
     parser.add_argument("--reward_noise", default=0.5, type=float)
-    parser.add_argument("--lmbda", default=0.0, type=float)
+    parser.add_argument("--lmbda", default=0.8, type=float)
 
 
 
