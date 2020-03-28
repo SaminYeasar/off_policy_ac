@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
-
+import copy
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -59,9 +59,9 @@ class DDPG(object):
 	def __init__(self, args, state_dim, action_dim, max_action):
 		self.actor = Actor(state_dim, action_dim, max_action).to(device)
 		self.actor_target = Actor(state_dim, action_dim, max_action).to(device)
-		self.old_actor = Actor(state_dim, action_dim, max_action).to(device)
+		#self.old_actor = Actor(state_dim, action_dim, max_action).to(device)
 		self.actor_target.load_state_dict(self.actor.state_dict())
-		self.old_actor.load_state_dict(self.actor.state_dict())
+		#self.old_actor.load_state_dict(self.actor.state_dict())
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
 
 		self.critic = Critic(state_dim, action_dim).to(device)
@@ -79,10 +79,13 @@ class DDPG(object):
 
 
 
-	def train(self, logger, args, env, replay_buffer, iterations, lmbda=0, batch_size=200, discount=0.99, tau=0.001):
+	def train(self, logger, args, env, replay_buffer, iterations,total_timesteps,writer, lmbda=0, batch_size=200, discount=0.99, tau=0.001):
 		episodic_critic_loss = []
 		episodic_actor_loss = []
+		episodic_actor_reg_loss = []
 
+		old_actor= copy.deepcopy(self.actor)
+		old_actor.load_state_dict(self.actor.state_dict())
 
 		for it in range(iterations):
 
@@ -117,11 +120,12 @@ class DDPG(object):
 			# Compute actor loss
 			#actor_loss = -self.critic(state, self.actor(state)).mean()
 			#reg = lmbda * nn.MSELoss(self.actor(state) - self.actor_target(state))
-			reg = 100* lmbda * (self.actor(state) - self.old_actor(state)).pow(2).mean()
-			actor_loss = -self.critic(state, self.actor(state)).mean() - reg
+			reg = 100 * (self.actor(state) - old_actor(state)).pow(2).mean()
+			actor_loss = -self.critic(state, self.actor(state)).mean() + reg*lmbda
 
 			# record actor loss:
 			episodic_actor_loss.append(actor_loss.detach())
+			episodic_actor_reg_loss.append(reg.detach())
 
 			# Optimize the actor
 			self.actor_optimizer.zero_grad()
@@ -137,14 +141,17 @@ class DDPG(object):
 
 
 
-		for param, old_param in zip(self.actor.parameters(), self.old_actor.parameters()):
-			old_param.data.copy_(tau * param.data + (1 - tau) * old_param.data)
+		#for param, old_param in zip(self.actor.parameters(), self.old_actor.parameters()):
+		#	old_param.data.copy_(tau * param.data + (1 - tau) * old_param.data)
 
 
 
 		if logger : 
 			logger.record_critic_loss(torch.stack(episodic_critic_loss).mean().cpu().numpy())
 			logger.record_actor_loss(torch.stack(episodic_actor_loss).mean().cpu().numpy())
+			writer.add_scalar('actor_loss', torch.stack(episodic_actor_loss).mean().cpu().numpy(), total_timesteps)
+			writer.add_scalar('reg_loss', torch.stack(episodic_actor_reg_loss).mean().cpu().numpy(), total_timesteps)
+
 
 
 	def save(self, filename, directory):

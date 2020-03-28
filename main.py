@@ -11,7 +11,7 @@ from utils import Logger
 from TD3 import TD3
 from DDPG import DDPG
 from SAC import SAC
-
+from torch.utils.tensorboard import SummaryWriter
 from utils import create_folder
 
 def create_policy(args, state_dim, action_dim, max_action):
@@ -46,7 +46,7 @@ def evaluate_policy(policy, eval_episodes=10):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--policy_name", default='TD3', help='SAC')	 # Policy name
+    parser.add_argument("--policy_name", default='DDPG', help='SAC')	 # Policy name
     parser.add_argument("--env_name", default="HalfCheetah-v2")			 # OpenAI gym environment name
     parser.add_argument("--seed", default=0, type=int)					 # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--start_timesteps", default=1e4, type=int)		 # How many time steps purely random policy is run for
@@ -88,6 +88,7 @@ if __name__ == "__main__":
         logger.save_args(args)
 
         print('Saving to', logger.save_folder)
+        writer = SummaryWriter(log_dir='{}/logs/'.format(logger.save_folder))
     else:
         logger = None
 
@@ -138,7 +139,7 @@ if __name__ == "__main__":
             if total_timesteps != 0:
                 print(("Total T: %d Episode Num: %d Episode T: %d Reward: %f") % (total_timesteps, episode_num, episode_timesteps, episode_reward))
 
-                policy.train(logger, args, env, replay_buffer, episode_timesteps, lmbda=args.lmbda)
+                policy.train(logger, args, env, replay_buffer, episode_timesteps, total_timesteps, writer, lmbda=args.lmbda)
 
             # Evaluate episode
             if timesteps_since_eval >= args.eval_freq:
