@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import copy
 import utils
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -152,12 +152,17 @@ class SAC(object):
                    pi.cpu().data.numpy().flatten(), log_pi.cpu().data.numpy().flatten()
 
 
-    def train(self, logger, args, env, replay_buffer, iterations, batch_size=200, discount=0.99, tau=0.005, policy_freq=2, target_entropy=None):
+    def train(self, logger, args, env, replay_buffer, iterations,total_timesteps, writer, lmbda=0, batch_size=200, discount=0.99, tau=0.005, policy_freq=2, target_entropy=None):
         episodic_critic_loss = []
         episodic_actor_loss = []
+        episodic_actor_reg_loss = []
         episodic_reward_loss = []
         Q_theta = []
         True_Q = []
+
+        old_actor = copy.deepcopy(self.actor)
+        old_actor.load_state_dict(self.actor.state_dict())
+
         for it in range(iterations):
 
             # Sample replay buffer:
@@ -199,8 +204,12 @@ class SAC(object):
                 _, pi, log_pi = self.actor(state)
                 actor_Q1, actor_Q2 = self.critic(state, pi)
                 actor_Q = torch.min(actor_Q1, actor_Q2)
-                actor_loss = (self.alpha.detach() * log_pi - actor_Q).mean()
+
+                _, pi_old,_ = old_actor(state)
+                reg = 100 * (pi - pi_old).pow(2).mean()
+                actor_loss = (self.alpha.detach() * log_pi - actor_Q).mean() + reg*lmbda
                 episodic_actor_loss.append(actor_loss.detach())
+                episodic_actor_reg_loss.append(reg.detach())
 
                 # Optimize the actor
                 self.actor_optimizer.zero_grad()
@@ -222,13 +231,13 @@ class SAC(object):
                 for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
                     target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
-                for param, target_param in zip(self.critic_hat.parameters(), self.critic_target_hat.parameters()):
-                    target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
 
         if logger: 
             logger.record_critic_loss(torch.stack(episodic_critic_loss).mean().cpu().numpy())
             logger.record_actor_loss(torch.stack(episodic_actor_loss).mean().cpu().numpy())
+            writer.add_scalar('actor_loss', torch.stack(episodic_actor_loss).mean().cpu().numpy(), total_timesteps)
+            writer.add_scalar('reg_loss', torch.stack(episodic_actor_reg_loss).mean().cpu().numpy(), total_timesteps)
 
 
 
